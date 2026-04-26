@@ -1393,9 +1393,12 @@ function sRead(){
       <div style="font-size:11px;font-weight:700;color:${tcm()};margin-bottom:4px">שם סטודנט/ית</div>
       <input type="text" value="${S.studentName||''}" placeholder="שם מלא..." oninput="S.studentName=this.value;saveWork()" style="width:100%;padding:6px 8px;border:1px solid ${brd()};border-radius:6px;font-family:'Heebo';font-size:13px;background:${bgc()};color:${tc()}">
     </div>
-    <div class="sb-btn" style="margin-top:8px;background:var(--teal);color:#fff" onclick="exportSubmissionJSON()">💾 גיבוי JSON להגשה</div>
-    <div style="font-size:10px;color:${tcm()};margin-top:4px;text-align:center">לייצוא PDF ואפשרויות נוספות ←</div>
-    <div class="sb-btn" style="margin-top:4px;background:var(--coral);color:#fff" onclick="S.showExport=true;R()">ייצוא התוצאה</div>\`;
+    <div class="sb-btn" style="margin-top:10px;padding:12px;background:linear-gradient(135deg,var(--coral),#FF7A55);color:#fff;font-size:15px;font-weight:800;box-shadow:0 4px 14px rgba(255,140,105,.3)" onclick="exportSubmission()">📤 הגשה למודל</div>
+    <div style="font-size:10px;color:${tcm()};margin-top:3px;text-align:center">מוריד JSON + פותח PDF לשמירה</div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <div class="sb-btn" style="flex:1;font-size:11px;background:var(--teal);color:#fff" onclick="exportSubmissionJSON()">💾 JSON בלבד</div>
+      <div class="sb-btn" style="flex:1;font-size:11px;background:var(--bg-glass);color:${tc()};border:1px solid ${brd()}" onclick="S.showExport=true;R()">אפשרויות נוספות</div>
+    </div>\`;
 }
 
 function mainContent(){return [mImud,mDisc,mPkg,mCanv,mRead][S.step]()}
@@ -2359,9 +2362,13 @@ function exportModal(){
   return `<div class="export-bg" onclick="S.showExport=false;R()">
     <div class="export-modal" onclick="event.stopPropagation()">
       <h3>ייצוא ושיתוף</h3>
-      <p>בחר את פורמט הייצוא הרצוי</p>
+      <div onclick="exportSubmission()" style="cursor:pointer;margin:10px 0 14px;padding:16px 20px;background:linear-gradient(135deg,var(--coral),#FF7A55);border-radius:14px;text-align:center;box-shadow:0 4px 16px rgba(255,140,105,.35);transition:transform .2s,box-shadow .2s" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(255,140,105,.45)'" onmouseleave="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(255,140,105,.35)'">
+        <div style="font-size:20px;font-weight:800;color:#fff">📤 הגשה למודל</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:4px">מוריד JSON + פותח PDF לשמירה</div>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">אפשרויות ייצוא נוספות</p>
       <div class="export-opt">
-        <div class="export-btn" onclick="exportFullPDF()" style="border:2px solid var(--coral)"><span style="font-size:18px;color:${tc()}">📋 PDF מלא</span><br><span style="font-size:11px">כל 5 השלבים</span></div>
+        <div class="export-btn" onclick="exportFullPDF()"><span style="font-size:18px;color:${tc()}">📋 PDF מלא</span><br><span style="font-size:11px">כל 5 השלבים</span></div>
         <div class="export-btn" onclick="exportPrint()"><span style="font-size:18px;color:${tc()}">📄 PDF</span><br><span style="font-size:11px">שלב נוכחי</span></div>
         <div class="export-btn" onclick="exportImage()"><span style="font-size:18px;color:${tc()}">🖼️ PNG</span><br><span style="font-size:11px">תמונה</span></div>
         <div class="export-btn" onclick="exportHTML()"><span style="font-size:18px;color:${tc()}">💾 HTML</span><br><span style="font-size:11px">שמירה</span></div>
@@ -3098,6 +3105,31 @@ function checkConsent(){
 }
 
 // ===== SUBMISSION JSON EXPORT =====
+function exportSubmission(){
+  // Combined submission: download JSON + open full PDF print window
+  S.showExport=false;R();
+  try{
+    // 1. Download JSON (reuse logic from exportSubmissionJSON)
+    const data={doc:S.doc,step:S.step,font:S.font,brks:S.brks,indents:S.indents,paraBreaks:S.paraBreaks,
+      fs:S.fs,lh:S.lh,cats:S.cats,activeCat:S.activeCat,marks:S.marks,
+      pkgs:S.pkgs,nodes:S.nodes,conns:S.conns,expandedPkgs:S.expandedPkgs,
+      stickies:S.stickies,labels:S.labels,shapes:S.shapes||[],notes:S.notes||{},
+      studentName:S.studentName||'',researchConsent:localStorage.getItem('kadam_research')||'no',
+      timestamp:new Date().toISOString()};
+    if(TEXTS.custom)data.customText=TEXTS.custom;
+    const json=JSON.stringify(data,null,2);
+    const blob=new Blob([json],{type:'application/json;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    const sname=(S.studentName||'').trim();
+    a.download='kadam_'+(sname?sname+'_':'')+D().title+'_'+new Date().toISOString().slice(0,10)+'.json';
+    a.click();
+    toast('קובץ JSON הורד. שמרו גם את ה-PDF ואז העלו את שניהם למודל');
+    // 2. Open full PDF print window after short delay
+    setTimeout(()=>{ exportFullPDF(); },800);
+  }catch(e){toast('שגיאה בהגשה: '+e.message);}
+}
+
 function exportSubmissionJSON(){
   S.showExport=false;R();
   try{
