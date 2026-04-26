@@ -724,9 +724,20 @@ function saveWork(){
 }
 function loadWork(){
   try{
-    const raw=localStorage.getItem('kadam_save');
+    let raw=localStorage.getItem('kadam_save');
+    let fromBackup=false;
+    if(!raw){
+      raw=localStorage.getItem('kadam_backup');
+      fromBackup=true;
+    }
     if(!raw){toast('אין עבודה שמורה');return false;}
-    const d=JSON.parse(raw);
+    let d;
+    try{d=JSON.parse(raw);}catch(parseErr){
+      raw=localStorage.getItem('kadam_backup');
+      if(!raw){toast('שמירה פגומה ואין גיבוי');return false;}
+      d=JSON.parse(raw);
+      fromBackup=true;
+    }
     if(d.customText)TEXTS.custom=d.customText;
     S.doc=d.doc||'psalms13';S.step=d.step||0;S.font=d.font||'assistant';
     S.brks=d.brks||{};S.indents=d.indents||{};S.paraBreaks=d.paraBreaks||{};
@@ -741,12 +752,12 @@ function loadWork(){
     S.pkgs=d.pkgs||[];S.nodes=d.nodes||[];S.conns=d.conns||[];S.expandedPkgs=d.expandedPkgs||{};
     S.stickies=d.stickies||[];S.labels=d.labels||[];S.shapes=d.shapes||[];
     S.notes=d.notes||{0:'',1:'',2:'',3:'',4:''};S.studentName=d.studentName||'';
-    S.splash=false;R();toast('עבודה נטענה');return true;
+    S.splash=false;R();toast(fromBackup?'עבודה שוחזרה מגיבוי':'עבודה נטענה');return true;
   }catch(e){toast('שגיאה בטעינה');return false;}
 }
-function hasSavedWork(){return !!localStorage.getItem('kadam_save');}
+function hasSavedWork(){return !!(localStorage.getItem('kadam_save')||localStorage.getItem('kadam_backup'));}
 function getSaveTime(){return localStorage.getItem('kadam_time')||'';}
-function clearSave(){localStorage.removeItem('kadam_save');localStorage.removeItem('kadam_time');toast('שמירה נמחקה');}
+function clearSave(){localStorage.removeItem('kadam_save');localStorage.removeItem('kadam_time');localStorage.removeItem('kadam_backup');localStorage.removeItem('kadam_backup_time');toast('שמירה נמחקה');}
 
 const undoStack=[];
 const redoStack=[];
@@ -3151,7 +3162,7 @@ function exportSubmissionJSON(){
   }catch(e){toast('שגיאה בייצוא JSON');}
 }
 
-// Auto-save every 2 minutes
+// Auto-save every 30 seconds
 setInterval(()=>{if(!S.splash)try{
   const data={doc:S.doc,step:S.step,font:S.font,brks:S.brks,indents:S.indents,paraBreaks:S.paraBreaks,
     fs:S.fs,lh:S.lh,cats:S.cats,activeCat:S.activeCat,marks:S.marks,
@@ -3160,7 +3171,18 @@ setInterval(()=>{if(!S.splash)try{
   if(TEXTS.custom)data.customText=TEXTS.custom;
   localStorage.setItem('kadam_save',JSON.stringify(data));
   localStorage.setItem('kadam_time',new Date().toLocaleString('he-IL'));
-}catch(e){}},120000);
+}catch(e){}},30000);
+
+// Backup save every 5 minutes
+setInterval(()=>{if(!S.splash)try{
+  const data={doc:S.doc,step:S.step,font:S.font,brks:S.brks,indents:S.indents,paraBreaks:S.paraBreaks,
+    fs:S.fs,lh:S.lh,cats:S.cats,activeCat:S.activeCat,marks:S.marks,
+    pkgs:S.pkgs,nodes:S.nodes,conns:S.conns,expandedPkgs:S.expandedPkgs,
+    stickies:S.stickies,labels:S.labels,shapes:S.shapes||[],studentName:S.studentName||'',notes:S.notes||{}};
+  if(TEXTS.custom)data.customText=TEXTS.custom;
+  localStorage.setItem('kadam_backup',JSON.stringify(data));
+  localStorage.setItem('kadam_backup_time',new Date().toLocaleString('he-IL'));
+}catch(e){}},300000);
 
 R();
 
