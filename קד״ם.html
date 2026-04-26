@@ -2448,13 +2448,13 @@ h2{text-align:center;margin-bottom:16px;font-size:22px}
 <h2>קד״ם — ${title}</h2>
 ${mainContent}
 ${notesExportHTML()}
-<script>
+<scr`+`ipt>
 // Auto-print when loaded
 window.onload=function(){setTimeout(function(){window.print()},600)}
-<\/script>
+<\/scr`+`ipt>
 
 <!-- GoatCounter analytics -->
-<script data-goatcounter="https://kadam.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<scr`+`ipt data-goatcounter="https://kadam.goatcounter.com/count" async src="//gc.zgo.at/count.js"><\/scr`+`ipt>
 </body>
 </html>`;
       const printWin=window.open('','_blank','width=900,height=700');
@@ -2865,9 +2865,9 @@ body{background:#fff;font-family:'Heebo',sans-serif;color:#1C335F;direction:rtl;
 </div>
 ${sectionsHtml}
 ${notesHtml?'<div class="pdf-section" style="page-break-after:auto">'+notesHtml+'</div>':''}
-<script>
+<scr`+`ipt>
 window.onload=function(){setTimeout(function(){window.print()},800)}
-<\/script>
+<\/scr`+`ipt>
 </body>
 </html>`;
 
