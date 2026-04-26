@@ -982,8 +982,8 @@ function splashScreen(){
     <div class="splash-wrap">
       <div class="splash-illust">${splashIllust()}</div>
       <div class="splash-content">
-        <div class="splash-logo" style="flex-direction:column;gap:6px">${appLogo(56)} <span class="splash-title">תנ״ך <span>לעומק</span></span></div>
-        <div class="splash-sub">כלי חכם לניתוח כתובים מקראיים</div>
+        <div class="splash-logo" style="flex-direction:column;gap:6px">${appLogo(56)} <span class="splash-title">קד״ם</span></div>
+        <div class="splash-sub">כלי קריאה צמודה לטקסטים ספרותיים</div>
         <div class="splash-steps">
           <div class="splash-steps-line"></div>
           ${stepNames.map((n,i)=>`<div class="splash-step">
@@ -3156,7 +3156,7 @@ setInterval(()=>{if(!S.splash)try{
   const data={doc:S.doc,step:S.step,font:S.font,brks:S.brks,indents:S.indents,paraBreaks:S.paraBreaks,
     fs:S.fs,lh:S.lh,cats:S.cats,activeCat:S.activeCat,marks:S.marks,
     pkgs:S.pkgs,nodes:S.nodes,conns:S.conns,expandedPkgs:S.expandedPkgs,
-    stickies:S.stickies,labels:S.labels,shapes:S.shapes||[],studentName:S.studentName||''};
+    stickies:S.stickies,labels:S.labels,shapes:S.shapes||[],studentName:S.studentName||'',notes:S.notes||{}};
   if(TEXTS.custom)data.customText=TEXTS.custom;
   localStorage.setItem('kadam_save',JSON.stringify(data));
   localStorage.setItem('kadam_time',new Date().toLocaleString('he-IL'));
