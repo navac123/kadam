@@ -2361,7 +2361,8 @@ function exportModal(){
       <h3>ייצוא ושיתוף</h3>
       <p>בחר את פורמט הייצוא הרצוי</p>
       <div class="export-opt">
-        <div class="export-btn" onclick="exportPrint()"><span style="font-size:18px;color:${tc()}">📄 PDF</span><br><span style="font-size:11px">הדפסה / PDF</span></div>
+        <div class="export-btn" onclick="exportFullPDF()" style="border:2px solid var(--coral)"><span style="font-size:18px;color:${tc()}">📋 PDF מלא</span><br><span style="font-size:11px">כל 5 השלבים</span></div>
+        <div class="export-btn" onclick="exportPrint()"><span style="font-size:18px;color:${tc()}">📄 PDF</span><br><span style="font-size:11px">שלב נוכחי</span></div>
         <div class="export-btn" onclick="exportImage()"><span style="font-size:18px;color:${tc()}">🖼️ PNG</span><br><span style="font-size:11px">תמונה</span></div>
         <div class="export-btn" onclick="exportHTML()"><span style="font-size:18px;color:${tc()}">💾 HTML</span><br><span style="font-size:11px">שמירה</span></div>
       </div>
@@ -2458,6 +2459,420 @@ window.onload=function(){setTimeout(function(){window.print()},600)}
         toast('חסום חלון קופץ — אפשר חלונות קופצים ונסה שוב');
       }
     }catch(e){toast('שגיאה בייצוא: '+e.message);}
+  },200);
+}
+
+function exportFullPDF(){
+  S.showExport=false;R();
+  toast('מכין PDF מלא...');
+  setTimeout(()=>{
+    try{
+      const vv=D().verses;
+      const title=D().title;
+      const studentName=S.studentName||'';
+      const fontFamily=fontCSS();
+
+      // Helper: render text with layout (imud formatting + marks)
+      function renderTextStatic(showMarks){
+        const lines=buildLines();
+        let html='<div style="position:relative;padding-right:48px;direction:rtl">';
+        lines.forEach((line)=>{
+          if(line.isPara){html+='<div style="height:12px"></div>';return;}
+          const indent=S.indents[line.lineKey]||0;
+          const indentPx=indent*40;
+          const firstWord=line.words[0];
+          let verseNum='';
+          if(firstWord.wi===0){
+            const v=vv[firstWord.vi];
+            if(v) verseNum='<span style="position:absolute;right:-40px;top:4px;font-family:Heebo;font-size:11px;color:#8A96AA;user-select:none;width:28px;text-align:center">'+v.n+'</span>';
+          }
+          html+='<div style="padding-right:'+indentPx+'px;font-size:'+S.fs+'px;line-height:'+S.lh+';position:relative;min-height:1em">';
+          html+=verseNum;
+          line.words.forEach(item=>{
+            const k=item.vi+'-'+item.wi;
+            let st='font-family:'+fontFamily+';font-size:'+S.fs+'px;line-height:'+S.lh+';display:inline;padding:2px 4px;border-radius:5px;';
+            if(showMarks){
+              const m=S.marks[k];
+              if(m){
+                const cat=getCatById(m.catId);
+                if(cat){
+                  const style=getStyleById(cat.styleId);
+                  ensureSubs(cat);
+                  const sub=cat.subs.find(s=>s.id===m.subId);
+                  const col=sub?C[sub.ci]:C[cat.ci];
+                  st+=style.apply(col);
+                }
+              }
+            }
+            html+='<span style="'+st+'">'+item.w+'</span> ';
+          });
+          html+='</div>';
+        });
+        html+='</div>';
+        return html;
+      }
+
+      // --- STEP 0: Imud ---
+      let step0Html='<div style="background:#fff;border:1px solid #ddd;border-radius:12px;padding:24px 32px;max-width:800px;margin:0 auto">';
+      step0Html+=renderTextStatic(false);
+      step0Html+='</div>';
+
+      // --- STEP 1: Discovery (with marks + legend) ---
+      let step1Html='<div style="background:#fff;border:1px solid #ddd;border-radius:12px;padding:24px 32px;max-width:800px;margin:0 auto">';
+      step1Html+=renderTextStatic(true);
+      step1Html+='</div>';
+      // Categories legend
+      if(S.cats.length && Object.keys(S.marks).length){
+        step1Html+='<div style="margin-top:16px;padding:16px;background:#f9f9f9;border-radius:12px;border:1px solid #ddd">';
+        step1Html+='<div style="font-size:15px;font-weight:800;margin-bottom:10px;color:#1C335F">מקרא סימונים</div>';
+        step1Html+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
+        S.cats.forEach(c=>{
+          ensureSubs(c);
+          const style=getStyleById(c.styleId);
+          c.subs.forEach(sub=>{
+            const col=C[sub.ci]||C[0];
+            const cnt=Object.values(S.marks).filter(m=>m.catId===c.id&&m.subId===sub.id).length;
+            if(!cnt)return;
+            step1Html+='<div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(28,51,95,.05);border:1px solid #D9DFF2">';
+            step1Html+='<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:13px;'+style.apply(col)+'">דוגמה</span>';
+            step1Html+='<span style="font-size:12px;font-weight:600">'+sub.name+'</span>';
+            step1Html+='<span style="font-size:10px;color:#4A5A7A">'+c.name+' ('+cnt+')</span>';
+            step1Html+='</div>';
+          });
+        });
+        step1Html+='</div></div>';
+      }
+
+      // --- STEP 2: Packages ---
+      let step2Html='';
+      if(S.pkgs.length){
+        step2Html+='<div style="background:#fff;border:1px solid #ddd;border-radius:12px;padding:24px 32px;max-width:800px;margin:0 auto">';
+        // Render text with package boxes
+        const lines=buildLines();
+        let allKeys=[];
+        lines.forEach(line=>{if(line.isPara)return;line.words.forEach(item=>{allKeys.push(item.vi+'-'+item.wi);});});
+        const pkgRanges=S.pkgs.map(pkg=>{
+          const first=allKeys.indexOf(pkg.words[0]);
+          const last=allKeys.indexOf(pkg.words[pkg.words.length-1]);
+          return {pkg,first,last};
+        }).filter(r=>r.first>=0&&r.last>=0);
+        pkgRanges.sort((a,b)=>{
+          const aIsChild=a.pkg.parentId?1:0;const bIsChild=b.pkg.parentId?1:0;
+          if(aIsChild!==bIsChild)return aIsChild-bIsChild;
+          return a.first-b.first;
+        });
+        let openPkgs=[];
+        let pkgHtml='<div style="position:relative;padding-right:48px;direction:rtl">';
+        lines.forEach((line)=>{
+          if(line.isPara){
+            const toReopen=[...openPkgs];
+            while(openPkgs.length){pkgHtml+='</div>';openPkgs.pop();}
+            pkgHtml+='<div style="height:12px"></div>';
+            toReopen.forEach(pid=>{const r=pkgRanges.find(r=>r.pkg.id===pid);if(r){pkgHtml+=staticPkgBox(r.pkg);openPkgs.push(pid);}});
+            return;
+          }
+          const lineWordKeys=line.words.map(item=>item.vi+'-'+item.wi);
+          const lineFirst=allKeys.indexOf(lineWordKeys[0]);
+          const lineLast=allKeys.indexOf(lineWordKeys[lineWordKeys.length-1]);
+          for(let i=openPkgs.length-1;i>=0;i--){
+            const r=pkgRanges.find(r=>r.pkg.id===openPkgs[i]);
+            if(r&&r.last<lineFirst){pkgHtml+='</div>';openPkgs.splice(i,1);}
+          }
+          pkgRanges.forEach(r=>{
+            if(!openPkgs.includes(r.pkg.id)&&r.first>=lineFirst&&r.first<=lineLast){
+              pkgHtml+=staticPkgBox(r.pkg);openPkgs.push(r.pkg.id);
+            }
+          });
+          const indent=S.indents[line.lineKey]||0;
+          const indentPx=indent*40;
+          const firstWord=line.words[0];
+          let verseNum='';
+          if(firstWord.wi===0){
+            const v=vv[firstWord.vi];
+            if(v)verseNum='<span style="position:absolute;right:-40px;top:4px;font-family:Heebo;font-size:10px;color:#4A5A7A;width:28px;text-align:center">'+v.n+'</span>';
+          }
+          pkgHtml+='<div style="padding-right:'+indentPx+'px;font-size:'+S.fs+'px;line-height:'+S.lh+';position:relative;min-height:1em">';
+          pkgHtml+=verseNum;
+          line.words.forEach(item=>{
+            const k=item.vi+'-'+item.wi;
+            let st='font-family:'+fontFamily+';font-size:'+S.fs+'px;line-height:'+S.lh+';display:inline;padding:2px 4px;border-radius:5px;';
+            const m=S.marks[k];
+            if(m){
+              const cat=getCatById(m.catId);
+              if(cat){const style=getStyleById(cat.styleId);ensureSubs(cat);const sub=cat.subs.find(s=>s.id===m.subId);const col=sub?C[sub.ci]:C[cat.ci];st+=style.apply(col);}
+            }
+            pkgHtml+='<span style="'+st+'">'+item.w+'</span> ';
+          });
+          pkgHtml+='</div>';
+          for(let i=openPkgs.length-1;i>=0;i--){
+            const r=pkgRanges.find(r=>r.pkg.id===openPkgs[i]);
+            if(r&&r.last>=lineFirst&&r.last<=lineLast){pkgHtml+='</div>';openPkgs.splice(i,1);}
+          }
+        });
+        while(openPkgs.length){pkgHtml+='</div>';openPkgs.pop();}
+        pkgHtml+='</div>';
+        step2Html+=pkgHtml;
+        step2Html+='</div>';
+        // Package summary cards
+        step2Html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">';
+        S.pkgs.forEach(p=>{
+          const c=C[p.ci];
+          const pkgWords=p.words.map(k=>{const[vi,wi]=k.split('-').map(Number);const wds=vv[vi]?.t.split(/\s+/);return wds?wds[wi]:'';}).filter(Boolean);
+          step2Html+='<div style="background:'+c.b+';border:2px solid '+c.c+';border-radius:14px;padding:14px">';
+          step2Html+='<div style="font-weight:800;color:'+c.c+';margin-bottom:6px">'+(p.emoji||'')+' '+p.name+'</div>';
+          step2Html+='<div style="font-size:11px;color:'+c.c+';opacity:.7;margin-bottom:4px">'+p.words.length+' מילים</div>';
+          step2Html+='<div style="display:flex;flex-wrap:wrap;gap:3px">'+pkgWords.slice(0,12).map(w=>'<span style="background:#F9F6F2;padding:2px 6px;border-radius:6px;font-size:14px;border:1px solid '+c.c+'">'+w+'</span>').join('')+'</div>';
+          step2Html+='</div>';
+        });
+        step2Html+='</div>';
+      } else {
+        step2Html='<div style="color:#8A96AA;text-align:center;padding:20px">אין חבילות</div>';
+      }
+
+      // Helper for static pkg box
+      function staticPkgBox(pkg){
+        const col=C[pkg.ci]||C[0];
+        const isChild=!!pkg.parentId;
+        let bg=col.b,border=col.c,borderStyle='solid';
+        if(pkg.style==='subtle'){bg=col.b+'88';borderStyle='dashed';}
+        else if(pkg.style==='border'){bg='transparent';}
+        return '<div style="background:'+bg+';border:2px '+borderStyle+' '+border+';border-radius:12px;padding:10px 14px;margin:6px 0">'
+          +'<div style="font-size:'+(isChild?'11':'12')+'px;font-weight:700;color:'+col.c+';margin-bottom:'+(isChild?'4':'6')+'px;display:flex;align-items:center;gap:4px">'+(pkg.emoji||'')+' '+pkg.name+'</div>';
+      }
+
+      // --- STEP 3: Canvas (static) ---
+      let step3Html='';
+      if(S.pkgs.length && S.nodes.length){
+        // Calculate canvas bounds
+        let maxX=0,maxY=0;
+        S.nodes.forEach((n,i)=>{
+          if(S.pkgs[i]?.parentId && S.pkgs.some(pp=>pp.id===S.pkgs[i].parentId))return;
+          maxX=Math.max(maxX,n.x+(n.w||220)+40);
+          maxY=Math.max(maxY,n.y+180);
+        });
+        if(S.stickies)S.stickies.forEach(s=>{maxX=Math.max(maxX,s.x+(s.w||180)+20);maxY=Math.max(maxY,s.y+(s.h||120)+20);});
+        if(S.shapes)S.shapes.forEach(sh=>{maxX=Math.max(maxX,sh.x+(sh.w||120)+20);maxY=Math.max(maxY,sh.y+(sh.h||80)+20);});
+        if(S.labels)S.labels.forEach(lb=>{maxX=Math.max(maxX,lb.x+200);maxY=Math.max(maxY,lb.y+40);});
+        maxX=Math.max(maxX,600);maxY=Math.max(maxY,400);
+
+        const childrenOf={};
+        S.pkgs.forEach((p,i)=>{
+          if(p.parentId&&S.pkgs.some(pp=>pp.id===p.parentId)){
+            if(!childrenOf[p.parentId])childrenOf[p.parentId]=[];
+            childrenOf[p.parentId].push(i);
+          }
+        });
+
+        step3Html+='<div style="position:relative;width:'+maxX+'px;height:'+maxY+'px;border:1px solid #ddd;border-radius:12px;background:#fafafa;overflow:hidden;direction:rtl">';
+
+        // SVG arrows
+        step3Html+='<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 '+maxX+' '+maxY+'">';
+        step3Html+='<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#FF7F6B"/></marker></defs>';
+        S.conns.forEach(cn=>{
+          const fi=S.pkgs.findIndex(p=>p.id===cn.from),ti=S.pkgs.findIndex(p=>p.id===cn.to);
+          if(fi<0||ti<0)return;
+          const fr={x:S.nodes[fi].x,y:S.nodes[fi].y,w:S.nodes[fi].w||220,h:80};
+          const tr={x:S.nodes[ti].x,y:S.nodes[ti].y,w:S.nodes[ti].w||220,h:80};
+          const ep=edgePts(fr,tr);
+          const d=curvedPath(ep);
+          step3Html+='<path d="'+d+'" fill="none" stroke="#FF7F6B" stroke-width="2" stroke-dasharray="8,5" marker-end="url(#ah)"/>';
+        });
+        step3Html+='</svg>';
+
+        // Arrow labels
+        S.conns.forEach(cn=>{
+          const fi=S.pkgs.findIndex(p=>p.id===cn.from),ti=S.pkgs.findIndex(p=>p.id===cn.to);
+          if(fi<0||ti<0)return;
+          const fr={x:S.nodes[fi].x,y:S.nodes[fi].y,w:S.nodes[fi].w||220,h:80};
+          const tr={x:S.nodes[ti].x,y:S.nodes[ti].y,w:S.nodes[ti].w||220,h:80};
+          const ep=edgePts(fr,tr);
+          const mx=(ep.fx+ep.tx)/2,my=(ep.fy+ep.ty)/2;
+          const lbl=(cn.emoji||'')+' '+(cn.label||'');
+          if(!lbl.trim())return;
+          step3Html+='<div style="position:absolute;left:'+mx+'px;top:'+my+'px;transform:translate(-50%,-50%);background:rgba(255,255,255,.85);padding:3px 10px;border-radius:8px;font-size:12px;font-weight:600;color:#1C335F;white-space:nowrap;border:1px solid #D9DFF2">'+lbl+'</div>';
+        });
+
+        // Nodes
+        S.pkgs.forEach((p,i)=>{
+          const hasParent=p.parentId&&S.pkgs.some(pp=>pp.id===p.parentId);
+          if(hasParent)return;
+          const nd=S.nodes[i];
+          const c=C[p.ci];
+          const nodeW=(childrenOf[p.id]||[]).length?Math.max(nd.w||220,280):(nd.w||220);
+          let bg=c.b,border=c.c,borderStyle='solid';
+          if(p.style==='subtle'){bg=c.b+'88';borderStyle='dashed';}
+          else if(p.style==='border'){bg='transparent';}
+          // Words preview
+          const wordData=p.words.map(k=>{const[vi,wi]=k.split('-').map(Number);const wds=vv[vi]?.t.split(/\s+/);return wds?wds[wi]:'';}).filter(Boolean);
+          const txt=wordData.slice(0,8).join(' ')+(wordData.length>8?' ...':'');
+          const verseSet=[...new Set(p.words.map(k=>parseInt(k.split('-')[0])))];
+          const verseNums=verseSet.map(vi=>vv[vi]?vv[vi].n:'').filter(Boolean);
+
+          step3Html+='<div style="position:absolute;left:'+nd.x+'px;top:'+nd.y+'px;width:'+nodeW+'px;background:'+bg+';border:2.5px '+borderStyle+' '+border+';border-radius:14px;padding:14px 16px;box-shadow:0 2px 6px rgba(28,51,95,.08)">';
+          step3Html+='<div style="font-size:13px;font-weight:800;color:'+c.c+';margin-bottom:6px">'+(p.emoji||'')+' '+p.name+'</div>';
+          step3Html+='<div style="font-family:'+fontFamily+';font-size:14px;color:#1C335F;line-height:1.6;opacity:.85">'+txt+'</div>';
+          if(verseNums.length)step3Html+='<div style="font-size:10px;color:'+c.c+';opacity:.5;margin-top:3px">&#1508;&#1505;&#1523; '+verseNums.join(',')+'</div>';
+          // Children
+          const children=childrenOf[p.id]||[];
+          if(children.length){
+            step3Html+='<div style="border-top:1px dashed '+c.c+'40;margin-top:8px;padding-top:6px">';
+            step3Html+='<div style="font-size:10px;font-weight:700;color:'+c.c+';opacity:.6;margin-bottom:4px">אריזות משנה ('+children.length+')</div>';
+            children.forEach(ci=>{
+              const cp=S.pkgs[ci];const cc=C[cp.ci];
+              const cwData=cp.words.map(k=>{const[vi,wi]=k.split('-').map(Number);const wds=vv[vi]?.t.split(/\s+/);return wds?wds[wi]:'';}).filter(Boolean);
+              const ctxt=cwData.slice(0,5).join(' ')+(cwData.length>5?' ...':'');
+              let cbg=cc.b,cborder=cc.c,cborderStyle='solid';
+              if(cp.style==='subtle'){cbg=cc.b+'88';cborderStyle='dashed';}else if(cp.style==='border'){cbg='transparent';}
+              step3Html+='<div style="background:'+cbg+';border:2px '+cborderStyle+' '+cborder+';border-radius:10px;padding:8px 10px;margin-bottom:4px">';
+              step3Html+='<div style="font-size:11px;font-weight:700;color:'+cc.c+'">'+(cp.emoji||'')+' '+cp.name+'</div>';
+              step3Html+='<div style="font-family:'+fontFamily+';font-size:12px;color:#1C335F;opacity:.7">'+ctxt+'</div>';
+              step3Html+='</div>';
+            });
+            step3Html+='</div>';
+          }
+          step3Html+='</div>';
+        });
+
+        // Shapes (static)
+        if(S.shapes)S.shapes.forEach(sh=>{
+          const col=C[sh.ci||0];const w=sh.w||120,h=sh.h||80;
+          if(sh.type==='frame'){
+            step3Html+='<div style="position:absolute;left:'+sh.x+'px;top:'+sh.y+'px;width:'+w+'px;height:'+h+'px;border:2.5px dashed '+col.c+';border-radius:14px;background:'+col.b+'30;z-index:0">';
+            if(sh.text)step3Html+='<div style="padding:8px 12px;font-size:14px;font-weight:700;color:'+col.c+';border-bottom:1.5px dashed '+col.c+'30">'+sh.text+'</div>';
+            step3Html+='</div>';
+          } else if(sh.type==='rect'){
+            step3Html+='<div style="position:absolute;left:'+sh.x+'px;top:'+sh.y+'px;width:'+w+'px;height:'+h+'px;border:2.5px solid '+col.c+';border-radius:10px;background:'+col.b+'60;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:'+col.c+'">'+(sh.text||'')+'</div>';
+          } else if(sh.type==='circle'){
+            const s=Math.max(w,h);
+            step3Html+='<div style="position:absolute;left:'+sh.x+'px;top:'+sh.y+'px;width:'+s+'px;height:'+s+'px;border:2.5px solid '+col.c+';border-radius:50%;background:'+col.b+'60;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:'+col.c+'">'+(sh.text||'')+'</div>';
+          } else if(sh.type==='diamond'){
+            step3Html+='<div style="position:absolute;left:'+sh.x+'px;top:'+sh.y+'px;width:'+w+'px;height:'+h+'px;transform:rotate(45deg);border:2.5px solid '+col.c+';border-radius:4px;background:'+col.b+'60;display:flex;align-items:center;justify-content:center"><div style="transform:rotate(-45deg);font-size:12px;font-weight:600;color:'+col.c+'">'+(sh.text||'')+'</div></div>';
+          } else if(sh.type==='line-h'){
+            step3Html+='<div style="position:absolute;left:'+sh.x+'px;top:'+(sh.y+h/2)+'px;width:'+w+'px;height:3px;background:'+col.c+';border-radius:2px"></div>';
+          }
+        });
+
+        // Stickies (static)
+        S.stickies.forEach(s=>{
+          const col=STICKY_COLORS[s.ci||0];
+          step3Html+='<div style="position:absolute;left:'+s.x+'px;top:'+s.y+'px;width:'+(s.w||180)+'px;min-height:60px;background:'+col.bg+';color:'+col.text+';border-radius:8px;padding:12px;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.1);white-space:pre-wrap">'+(s.text||'')+'</div>';
+        });
+
+        // Labels (static)
+        S.labels.forEach(lb=>{
+          step3Html+='<div style="position:absolute;left:'+lb.x+'px;top:'+lb.y+'px;font-size:'+(lb.size||16)+'px;font-weight:700;color:#1C335F;white-space:pre-wrap">'+(lb.text||'')+'</div>';
+        });
+
+        step3Html+='</div>';
+      } else {
+        step3Html='<div style="color:#8A96AA;text-align:center;padding:20px">אין חבילות לארגון</div>';
+      }
+
+      // --- STEP 4: Reading (summary view from mRead, static) ---
+      let step4Html='<div style="background:#fff;border:1px solid #ddd;border-radius:12px;padding:24px 32px;max-width:800px;margin:0 auto">';
+      step4Html+=renderTextStatic(true);
+      step4Html+='</div>';
+      // Re-include packages summary
+      if(S.pkgs.length){
+        step4Html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">';
+        S.pkgs.forEach(p=>{
+          const c=C[p.ci];
+          const pkgWords=p.words.map(k=>{const[vi,wi]=k.split('-').map(Number);const wds=vv[vi]?.t.split(/\s+/);return wds?wds[wi]:'';}).filter(Boolean);
+          step4Html+='<div style="background:'+c.b+';border:2px solid '+c.c+';border-radius:14px;padding:14px">';
+          step4Html+='<div style="font-weight:800;color:'+c.c+';margin-bottom:6px">'+(p.emoji||'')+' '+p.name+'</div>';
+          step4Html+='<div style="font-size:11px;color:'+c.c+';opacity:.7;margin-bottom:4px">'+p.words.length+' מילים</div>';
+          step4Html+='<div style="display:flex;flex-wrap:wrap;gap:3px">'+pkgWords.slice(0,8).map(w=>'<span style="background:#F9F6F2;padding:2px 6px;border-radius:6px;font-size:14px;border:1px solid '+c.c+'">'+w+'</span>').join('')+'</div>';
+          step4Html+='</div>';
+        });
+        step4Html+='</div>';
+      }
+
+      // --- Notes ---
+      const notesHtml=notesExportHTML();
+
+      // --- Connections summary ---
+      let connsHtml='';
+      if(S.conns.length){
+        connsHtml='<div style="margin-top:16px;padding:16px;background:#f9f9f9;border-radius:12px;border:1px solid #ddd">';
+        connsHtml+='<div style="font-size:15px;font-weight:800;margin-bottom:10px;color:#1C335F">קישורים בין חבילות</div>';
+        S.conns.forEach(cn=>{
+          const fromPkg=S.pkgs.find(p=>p.id===cn.from);
+          const toPkg=S.pkgs.find(p=>p.id===cn.to);
+          if(!fromPkg||!toPkg)return;
+          const lbl=(cn.emoji||'')+' '+(cn.label||'');
+          connsHtml+='<div style="margin-bottom:6px;font-size:13px;color:#1C335F">';
+          connsHtml+='<span style="font-weight:700;color:'+C[fromPkg.ci].c+'">'+(fromPkg.emoji||'')+' '+fromPkg.name+'</span>';
+          connsHtml+=' ← <span style="font-style:italic;color:#4A5A7A">'+(lbl.trim()||'קשור')+'</span> ← ';
+          connsHtml+='<span style="font-weight:700;color:'+C[toPkg.ci].c+'">'+(toPkg.emoji||'')+' '+toPkg.name+'</span>';
+          connsHtml+='</div>';
+        });
+        connsHtml+='</div>';
+      }
+
+      // Build the full document
+      const stepNames=['עימוד','גילוי','אריזה','ארגון','קריאה'];
+      const stepContents=[step0Html,step1Html,step2Html,step3Html,step4Html];
+      const stepDescs=['חלוקת הטקסט לשורות, הזחות ופסקאות','סימון מילים וביטויים בצבעים וסגנונות','קיבוץ מילים מסומנות לחבילות נושאיות','ארגון חזותי של החבילות על לוח','תצוגת סיכום'];
+
+      let sectionsHtml='';
+      stepContents.forEach((content,i)=>{
+        sectionsHtml+='<div class="pdf-section">';
+        sectionsHtml+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">';
+        sectionsHtml+='<div style="width:36px;height:36px;border-radius:50%;background:#1C335F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800">'+i+'</div>';
+        sectionsHtml+='<div><div style="font-size:20px;font-weight:800;color:#1C335F">שלב '+i+': '+stepNames[i]+'</div>';
+        sectionsHtml+='<div style="font-size:12px;color:#4A5A7A">'+stepDescs[i]+'</div></div>';
+        sectionsHtml+='</div>';
+        sectionsHtml+=content;
+        if(i===3 && connsHtml) sectionsHtml+=connsHtml;
+        sectionsHtml+='</div>';
+      });
+
+      const printHTML=`<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>קד״ם - ${title} - PDF מלא</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Frank+Ruhl+Libre:wght@400;500;700&family=David+Libre:wght@400;500;700&family=Noto+Serif+Hebrew:wght@400;500;700&family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fff;font-family:'Heebo',sans-serif;color:#1C335F;direction:rtl;padding:30px 40px;line-height:1.6}
+.pdf-header{text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid #1C335F}
+.pdf-header h1{font-size:28px;font-weight:900;color:#1C335F;margin-bottom:4px}
+.pdf-header .subtitle{font-size:16px;color:#4A5A7A;margin-bottom:8px}
+.pdf-header .student{font-size:14px;color:#FF8C69;font-weight:700}
+.pdf-section{margin-bottom:30px;padding-bottom:20px;page-break-after:always;page-break-inside:avoid}
+.pdf-section:last-child{page-break-after:auto}
+@media print{
+  body{padding:15px 20px}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+  .pdf-section{page-break-after:always;page-break-inside:avoid}
+  .pdf-section:last-child{page-break-after:auto}
+}
+</style>
+</head>
+<body>
+<div class="pdf-header">
+  <h1>קד״ם - ${title}</h1>
+  <div class="subtitle">ניתוח ספרותי מלא - כל 5 השלבים</div>
+  ${studentName?'<div class="student">'+studentName+'</div>':''}
+</div>
+${sectionsHtml}
+${notesHtml?'<div class="pdf-section" style="page-break-after:auto">'+notesHtml+'</div>':''}
+<script>
+window.onload=function(){setTimeout(function(){window.print()},800)}
+<\/script>
+</body>
+</html>`;
+
+      const printWin=window.open('','_blank','width=1000,height=800');
+      if(printWin){
+        printWin.document.write(printHTML);
+        printWin.document.close();
+        toast('חלון הדפסה נפתח - בחר "שמור כ-PDF"');
+      }else{
+        toast('חסום חלון קופץ - אפשר חלונות קופצים ונסה שוב');
+      }
+    }catch(e){toast('שגיאה בייצוא: '+e.message);console.error(e);}
   },200);
 }
 
